@@ -539,6 +539,21 @@ def test_capture_trailers(test_client_factory: TestClientFactory, empty: bool) -
     assert "x-item" not in response.headers
 
 
+def test_capture_trailers_streaming(test_client_factory: TestClientFactory) -> None:
+    async def app(scope: Scope, receive: Receive, send: Send) -> None:
+        await send({"type": "http.response.start", "status": 200, "trailers": True})
+        await send({"type": "http.response.body", "body": b"hello", "more_body": True})
+        await send({"type": "http.response.body", "body": b""})
+        await send({"type": "http.response.trailers", "headers": [(b"x-item", b"one")]})
+
+    client = test_client_factory(app)
+    with client.stream("GET", "/") as response:
+        assert response.status_code == 200
+        assert response.read() == b"hello"
+        assert response.extensions["http.response.trailers"] == [(b"x-item", b"one")]
+        assert "x-item" not in response.headers
+
+
 @pytest.mark.parametrize("partial", [True, False])
 def test_incomplete_trailers(test_client_factory: TestClientFactory, partial: bool) -> None:
     async def app(scope: Scope, receive: Receive, send: Send) -> None:
